@@ -1,3 +1,4 @@
+var logger = require('nodelogger').Logger(__filename);
 /**
  * Arguments.
  */
@@ -108,7 +109,7 @@ function pad(n) {
     return Array(5 - n.toString().length).join('0') + n;
 }
 
-function runMongoMigrate(direction, migrationEnd) {
+function runMongoMigrate(direction, migrationEnd, callback) {
     if (typeof direction !== 'undefined') {
         options.command = direction;
     }
@@ -129,6 +130,7 @@ function runMongoMigrate(direction, migrationEnd) {
             migrateToNum = hasMigrateTo ? parseInt(migrateTo, 10) : undefined,
             migrateToFound = !hasMigrateTo;
 
+        var migration = fs.readdirSync('migrations');
         var migrationsToRun = fs.readdirSync('migrations')
             .filter(function (file) {
                 var formatCorrect = file.match(/^\d+.*\.js$/),
@@ -244,9 +246,9 @@ function runMongoMigrate(direction, migrationEnd) {
     function performMigration(direction, migrateTo) {
         var db = require('./lib/db');
         var config;
-        if(configObj){
+        if (configObj) {
             config = configObj;
-        }else{
+        } else {
             config = require(process.cwd() + path.sep + configFileName)[dbProperty];
         }
         db.getConnection(config, function (err, db) {
@@ -291,7 +293,11 @@ function runMongoMigrate(direction, migrationEnd) {
 
                 set.on('save', function () {
                     log('migration', 'complete');
-                    process.exit();
+                    if (typeof callback === 'function') {
+                        callback();
+                    } else {
+                        process.exit();
+                    }
                 });
 
                 set[direction](null, lastMigrationNum);
@@ -307,7 +313,12 @@ function runMongoMigrate(direction, migrationEnd) {
 }
 
 function chdir(dir) {
-    process.chdir(cwd = dir);
+    try {
+        process.chdir(cwd = dir);
+    } catch (e) {
+        logger.error(dir, e);
+        logger.warn('Current directory is', process.cwd());
+    }
 }
 
 function setConfigFilename(filename) {
